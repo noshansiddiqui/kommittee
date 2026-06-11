@@ -465,7 +465,11 @@
         renderActionBar();
     }
 
-    if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister()));
+      caches.keys().then(keys => keys.forEach(k => caches.delete(k)));
+      navigator.serviceWorker.register('/kommittee/sw.js', {scope: '/kommittee/'});
+    }
 </script>
 
 </body>
