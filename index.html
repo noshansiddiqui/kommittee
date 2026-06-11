@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Kommittee">
+    <meta name="theme-color" content="#2c3e50">
+    <link rel="manifest" href="manifest.json">
+    <title>Committee Payment Manager</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f4f6f9; margin: 0; padding: 20px; color: #333; }
+        .container { max-width: 1400px; margin: 0 auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        h2 { color: #2c3e50; margin-top: 0; border-bottom: 2px solid #edf2f7; padding-bottom: 10px; margin-bottom: 20px; }
+
+        /* Dashboard */
+        .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .dash-card { background: #f8fafc; border-radius: 8px; padding: 15px; text-align: center; border: 1px solid #edf2f7; }
+        .dash-card .label { font-size: 0.8em; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px; margin-bottom: 5px; }
+        .dash-card .value { font-size: 1.6em; font-weight: 700; color: #1e293b; }
+        .dash-card.green .value { color: #03543f; }
+        .dash-card.blue .value { color: #1e3a8a; }
+        .dash-card.orange .value { color: #92400e; }
+
+        /* Table */
+        .table-container { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; text-align: left; min-width: 1000px; }
+        th, td { padding: 12px 15px; border-bottom: 1px solid #edf2f7; }
+        th { background-color: #f8fafc; color: #4a5568; font-weight: 600; text-transform: uppercase; font-size: 0.85em; letter-spacing: 0.5px; }
+        tr:hover { background-color: #f8fafc; }
+        .status-btn { padding: 6px 12px; border: none; border-radius: 20px; cursor: pointer; font-size: 0.85em; font-weight: 600; width: 75px; text-align: center; display: inline-block; transition: all 0.2s; }
+        .status-paid { background-color: #def7ec; color: #03543f; }
+        .status-unpaid { background-color: #fde8e8; color: #9b1c1c; }
+        .highlight-row { font-weight: bold; background-color: #f1f5f9; }
+        .footer-row { background-color: #f8fafc; font-weight: bold; border-top: 2px solid #cbd5e1; }
+        .target-met { color: #03543f; background-color: #def7ec; padding: 4px 8px; border-radius: 4px; }
+        .target-pending { color: #4a5568; }
+        .beneficiary-total { font-weight: bold; color: #1e3a8a; background-color: #dbeafe; padding: 4px 8px; border-radius: 4px; }
+
+        /* Editable cells */
+        .editable { cursor: pointer; border: 1px dashed transparent; padding: 4px 8px; border-radius: 4px; }
+        .editable:hover { border-color: #94a3b8; background: #f1f5f9; }
+        .edit-input { padding: 4px 8px; border: 1px solid #3b82f6; border-radius: 4px; font-size: inherit; font-family: inherit; width: 90px; }
+
+        /* Progress bar */
+        .progress-bar { width: 100%; height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; margin-top: 4px; }
+        .progress-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
+        .progress-fill.low { background: #f87171; }
+        .progress-fill.mid { background: #fbbf24; }
+        .progress-fill.high { background: #34d399; }
+
+        /* Action bar */
+        .action-bar { margin-bottom: 20px; display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+        .action-btn { border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.9em; font-weight: 500; transition: background 0.2s; }
+        .reset-btn { background-color: #e2e8f0; color: #4a5568; }
+        .reset-btn:hover { background-color: #cbd5e1; }
+        .export-btn { background-color: #dbeafe; color: #1e3a8a; }
+        .export-btn:hover { background-color: #bfdbfe; }
+        .import-btn { background-color: #d1fae5; color: #065f46; }
+        .import-btn:hover { background-color: #a7f3d0; }
+
+        /* Mobile */
+        @media (max-width: 768px) {
+            body { padding: 10px; }
+            .container { padding: 12px; }
+            h2 { font-size: 1.2em; }
+            .dashboard { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+            .dash-card .value { font-size: 1.3em; }
+            .action-bar { justify-content: center; }
+            th, td { padding: 8px 6px; font-size: 0.8em; }
+            .status-btn { width: 60px; font-size: 0.75em; padding: 4px 6px; }
+        }
+
+        /* Print */
+        @media print {
+            body { background: white; padding: 0; }
+            .container { box-shadow: none; padding: 0; }
+            .action-bar { display: none; }
+            .status-btn { border: 1px solid #ccc; }
+            .status-paid { background-color: #def7ec !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .status-unpaid { background-color: #fde8e8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .dashboard { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .progress-fill { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+
+        /* Setup Wizard */
+        .wizard-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+        .wizard { background: white; border-radius: 12px; padding: 30px; max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto; }
+        .wizard h3 { margin-top: 0; color: #2c3e50; }
+        .wizard label { display: block; margin: 12px 0 4px; font-weight: 600; color: #4a5568; font-size: 0.9em; }
+        .wizard input, .wizard select { width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 1em; box-sizing: border-box; }
+        .wizard .name-inputs input { width: auto; min-width: 120px; flex: 1; margin-bottom: 0; }
+        .wizard .name-inputs select { width: auto; }
+        .wizard .name-inputs { margin: 12px 0; }
+        .wizard button { margin-top: 16px; padding: 10px 20px; background: #2c3e50; color: white; border: none; border-radius: 6px; font-size: 1em; cursor: pointer; width: 100%; }
+        .wizard button:hover { background: #1e293b; }
+    </style>
+</head>
+<body>
+
+<div id="setupWizard" class="wizard-overlay" style="display:none">
+    <div class="wizard">
+        <h3>🎯 Setup New Kommittee</h3>
+        <label>Start Month</label>
+        <select id="wizStartMonth"></select>
+        <label>Full Rate (£ per month)</label>
+        <input type="number" id="wizFullRate" value="500" min="1">
+        <label>Beneficiary Slots</label>
+        <div class="name-inputs" id="wizNames"></div>
+        <button type="button" onclick="addSlot()" style="margin-top:8px;padding:8px 14px;background:#d1fae5;color:#065f46;border:none;border-radius:6px;cursor:pointer;font-size:0.9em">+ Add Slot</button>
+        <button onclick="completeSetup()">✓ Create Kommittee</button>
+    </div>
+</div>
+
+<div class="container">
+    <p style="margin:0 0 4px;color:#6b21a8;font-size:1.5em;font-weight:700;">Maria Noshan</p>
+    <h2>Committee Payment Manager</h2>
+
+    <div class="dashboard" id="dashboard"></div>
+
+    <div class="action-bar"></div>
+
+    <div class="table-container">
+        <table>
+            <thead id="tableHead">
+                <tr>
+                    <th>Kommittee</th>
+                    <th>Beneficiary Name(s)</th>
+                    <th>Rate</th>
+                    <th>Received</th>
+                    <th>Progress</th>
+                </tr>
+            </thead>
+            <tbody id="appRows"></tbody>
+            <tfoot>
+                <tr class="footer-row" id="footerSummary"></tr>
+            </tfoot>
+        </table>
+    </div>
+</div>
+
+<script>
+    const allMonths = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+    let committeeData = JSON.parse(localStorage.getItem('committeeData')) || null;
+    let isLocked = JSON.parse(localStorage.getItem('committeeLocked')) || false;
+
+    function getMonthsList() { const seen = []; committeeData.forEach(row => { const m = row.month.slice(0,3); if (!seen.includes(m)) seen.push(m); }); return seen; }
+
+    // --- Setup Wizard ---
+    function showWizard() {
+        document.getElementById('setupWizard').style.display = 'flex';
+        const sel = document.getElementById('wizStartMonth');
+        sel.innerHTML = allMonths.map(m => `<option>${m}</option>`).join('');
+        slotCount = 0;
+        document.getElementById('wizNames').innerHTML = '';
+    }
+
+    let slotCount = 0;
+    function addSlot() {
+        const i = slotCount++;
+        const div = document.getElementById('wizNames');
+        div.insertAdjacentHTML('beforeend', `<div id="slotRow${i}" style="display:flex;gap:8px;margin-bottom:8px;align-items:center">
+            <select data-type="${i}" onchange="toggleSlot(${i})" style="width:80px;padding:6px;border-radius:6px;border:1px solid #cbd5e1"><option value="full">Full</option><option value="half">Half</option></select>
+            <span id="slotNames${i}" style="display:flex;gap:8px;flex:1"><input type="text" placeholder="Beneficiary ${i+1}" data-idx="${i}" style="flex:1"></span>
+            <button type="button" onclick="removeSlot(${i})" style="padding:4px 8px;background:#fde8e8;color:#9b1c1c;border:none;border-radius:4px;cursor:pointer">✕</button>
+        </div>`);
+    }
+
+    function removeSlot(i) {
+        const el = document.getElementById(`slotRow${i}`);
+        if (el) el.remove();
+    }
+
+    function toggleSlot(i) {
+        const type = document.querySelector(`select[data-type="${i}"]`).value;
+        const span = document.getElementById(`slotNames${i}`);
+        if (type === 'half') {
+            span.innerHTML = `<input type="text" placeholder="Name A" data-idx="${i}" data-part="a" style="flex:1"><input type="text" placeholder="Name B" data-idx="${i}" data-part="b" style="flex:1">`;
+        } else {
+            span.innerHTML = `<input type="text" placeholder="Beneficiary ${i+1}" data-idx="${i}" style="flex:1">`;
+        }
+    }
+
+    function completeSetup() {
+        const startMonth = document.getElementById('wizStartMonth').value;
+        const fullRate = parseInt(document.getElementById('wizFullRate').value) || 500;
+        const startIdx = allMonths.indexOf(startMonth);
+
+        // Build slot entries (half = 2 rows same month)
+        const slots = [];
+        const remaining = document.querySelectorAll('#wizNames > div');
+        if (remaining.length < 2) { alert('Add at least 2 beneficiary slots.'); return; }
+        for (const row of remaining) {
+            const type = row.querySelector('select').value;
+            if (type === 'half') {
+                const a = row.querySelector(`input[data-part="a"]`).value.trim();
+                const b = row.querySelector(`input[data-part="b"]`).value.trim();
+                if (!a || !b) { alert(`Both names are required for half kommittee slots.`); return; }
+                slots.push({ type: 'half', names: [a, b] });
+            } else {
+                const el = row.querySelector('input');
+                slots.push({ type: 'full', names: [el.value.trim() || `Beneficiary ${slots.length + 1}`] });
+            }
+        }
+        const count = slots.length;
+
+        // Duplicate check
+        const allNames = slots.flatMap(s => s.names).map(n => n.toLowerCase());
+        const dupes = allNames.filter((n, i) => allNames.indexOf(n) !== i);
+        if (dupes.length) { alert(`Duplicate name(s): ${[...new Set(dupes)].join(', ')}`); return; }
+
+        committeeData = [];
+        const monthAbbrs = [];
+        for (let i = 0; i < count; i++) { monthAbbrs.push(allMonths[(startIdx + i) % 12].slice(0, 3)); }
+
+        for (let i = 0; i < count; i++) {
+            const month = allMonths[(startIdx + i) % 12];
+            const status = {};
+            monthAbbrs.forEach(m => { status[m] = false; });
+            if (slots[i].type === 'half') {
+                committeeData.push({ month, name: slots[i].names[0], amount: fullRate / 2, status: {...status} });
+                committeeData.push({ month, name: slots[i].names[1], amount: fullRate / 2, status: {...status} });
+            } else {
+                committeeData.push({ month, name: slots[i].names[0], amount: fullRate, status });
+            }
+        }
+
+        isLocked = true;
+        localStorage.setItem('committeeData', JSON.stringify(committeeData));
+        localStorage.setItem('committeeLocked', 'true');
+        document.getElementById('setupWizard').style.display = 'none';
+        renderDashboard();
+        renderTable();
+        renderActionBar();
+    }
+
+    // --- Payout Toggle ---
+    function togglePayout(rowIndex) {
+        committeeData[rowIndex].payoutReceived = !committeeData[rowIndex].payoutReceived;
+        localStorage.setItem('committeeData', JSON.stringify(committeeData));
+        renderTable();
+    }
+
+    // --- Edit functions (only work when not locked) ---
+    function editName(rowIndex, el) {
+        if (isLocked) return;
+        const current = committeeData[rowIndex].name;
+        const input = document.createElement('input');
+        input.type = 'text'; input.value = current; input.className = 'edit-input'; input.style.width = '150px';
+        el.replaceWith(input); input.focus(); input.select();
+        const save = () => { committeeData[rowIndex].name = input.value.trim() || current; localStorage.setItem('committeeData', JSON.stringify(committeeData)); renderTable(); renderDashboard(); };
+        input.onblur = save;
+        input.onkeydown = (e) => { if (e.key === 'Enter') input.blur(); if (e.key === 'Escape') { input.value = current; input.blur(); } };
+    }
+
+    function editCell(rowIndex, field, el) {
+        if (isLocked) return;
+        const current = committeeData[rowIndex][field];
+        const input = document.createElement('input');
+        input.type = 'text'; input.value = current; input.className = 'edit-input';
+        el.replaceWith(input); input.focus(); input.select();
+        const save = () => {
+            const newVal = input.value.trim() || current;
+            committeeData[rowIndex][field] = newVal;
+            const startIdx = allMonths.indexOf(newVal);
+            if (startIdx !== -1) {
+                for (let i = rowIndex + 1; i < committeeData.length; i++) {
+                    committeeData[i].month = allMonths[(startIdx + (i - rowIndex)) % 12];
+                }
+            }
+            const newMonths = getMonthsList();
+            committeeData.forEach((row, i) => {
+                const oldStatus = Object.values(row.status);
+                const newStatus = {};
+                newMonths.forEach((m, j) => { newStatus[m] = oldStatus[j] !== undefined ? oldStatus[j] : false; });
+                committeeData[i].status = newStatus;
+            });
+            localStorage.setItem('committeeData', JSON.stringify(committeeData));
+            renderTable(); renderDashboard();
+        };
+        input.onblur = save;
+        input.onkeydown = (e) => { if (e.key === 'Enter') input.blur(); if (e.key === 'Escape') { input.value = current; input.blur(); } };
+    }
+
+    // --- Dashboard ---
+    function renderDashboard() {
+        const monthsList = getMonthsList();
+        const targetPerMonth = committeeData.reduce((sum, r) => sum + r.amount, 0);
+        const grandTotal = targetPerMonth * monthsList.length;
+        const dash = document.getElementById("dashboard");
+        let totalCollected = 0, totalPaid = 0, totalPayments = committeeData.length * monthsList.length;
+        committeeData.forEach(row => { monthsList.forEach(m => { if (row.status[m]) { totalCollected += row.amount; totalPaid++; } }); });
+        const remaining = grandTotal - totalCollected;
+        const pct = Math.round((totalCollected / grandTotal) * 100);
+        dash.innerHTML = `
+            <div class="dash-card green"><div class="label">Total Collected</div><div class="value">£${totalCollected.toLocaleString()}</div></div>
+            <div class="dash-card orange"><div class="label">Remaining</div><div class="value">£${remaining.toLocaleString()}</div></div>
+            <div class="dash-card blue"><div class="label">Overall Progress</div><div class="value">${pct}%</div></div>
+            <div class="dash-card"><div class="label">Payments Made</div><div class="value">${totalPaid} / ${totalPayments}</div></div>
+        `;
+    }
+
+    // --- Table ---
+    function renderTable() {
+        const monthsList = getMonthsList();
+        const targetPerMonth = committeeData.reduce((sum, r) => sum + r.amount, 0);
+        const tbody = document.getElementById("appRows");
+        const tfoot = document.getElementById("footerSummary");
+        const thead = document.getElementById("tableHead");
+        tbody.innerHTML = "";
+
+        const headerRow = thead.querySelector('tr');
+        headerRow.innerHTML = `<th>Kommittee</th><th>Beneficiary Name(s)</th><th>Rate</th><th>Progress</th><th>Payout</th>`;
+        if (!isLocked) headerRow.innerHTML += `<th></th>`;
+        monthsList.forEach(m => { headerRow.innerHTML += `<th>${m}</th>`; });
+        headerRow.innerHTML += `<th>Received</th>`;
+
+        let columnTotals = {};
+        monthsList.forEach(m => { columnTotals[m] = 0; });
+
+        committeeData.forEach((row, rowIndex) => {
+            let totalPaidToPerson = 0;
+            monthsList.forEach(m => { if (row.status[m]) totalPaidToPerson += row.amount; });
+            const maxReceivable = row.amount * monthsList.length;
+            const pct = Math.round((totalPaidToPerson / maxReceivable) * 100);
+            const level = pct < 40 ? 'low' : pct < 70 ? 'mid' : 'high';
+            const payoutReceived = row.payoutReceived || false;
+
+            const tr = document.createElement("tr");
+            const prevMonth = rowIndex > 0 ? committeeData[rowIndex - 1].month : '';
+            const showMonth = row.month !== prevMonth;
+            const monthIdx = monthsList.indexOf(row.month.slice(0, 3));
+            tr.style.backgroundColor = monthIdx % 2 === 0 ? '#ffffff' : '#f0f7ff';
+            let rowHTML = `
+                <td class="highlight-row">${showMonth ? (isLocked ? row.month : `<span class="editable" onclick="editCell(${rowIndex}, 'month', this)">${row.month}</span>`) : ''}</td>
+                <td>${isLocked ? row.name : `<span class="editable" onclick="editName(${rowIndex}, this)">${row.name}</span>`}</td>
+                <td>£${row.amount}</td>
+                <td><div class="progress-bar"><div class="progress-fill ${level}" style="width:${pct}%"></div></div></td>
+                <td><button class="status-btn ${payoutReceived ? 'status-paid' : 'status-unpaid'}" onclick="togglePayout(${rowIndex})">${payoutReceived ? '✓ Received' : 'Pending'}</button></td>
+            `;
+            if (!isLocked) rowHTML += `<td><button class="action-btn reset-btn" style="padding:4px 8px;font-size:0.75em" onclick="removeBeneficiary(${rowIndex})">✕</button></td>`;
+            tr.innerHTML = rowHTML;
+
+            monthsList.forEach(m => {
+                const isPaid = row.status[m];
+                if (isPaid) columnTotals[m] += row.amount;
+                const td = document.createElement("td");
+                const btn = document.createElement("button");
+                btn.className = `status-btn ${isPaid ? 'status-paid' : 'status-unpaid'}`;
+                btn.textContent = isPaid ? "Paid" : "Unpaid";
+                btn.onclick = () => { committeeData[rowIndex].status[m] = !isPaid; localStorage.setItem('committeeData', JSON.stringify(committeeData)); renderTable(); renderDashboard(); };
+                td.appendChild(btn); tr.appendChild(td);
+            });
+
+            const recTd = document.createElement("td");
+            recTd.innerHTML = `<span class="beneficiary-total">£${totalPaidToPerson.toLocaleString()}</span>`;
+            tr.appendChild(recTd);
+            tbody.appendChild(tr);
+        });
+
+        let footerHTML = `<td colspan="3" class="highlight-row">Monthly Totals:</td><td>-</td><td>-</td>`;
+        if (!isLocked) footerHTML += `<td></td>`;
+        monthsList.forEach(m => {
+            const total = columnTotals[m];
+            footerHTML += total >= targetPerMonth ? `<td><span class="target-met">£${total.toLocaleString()}</span></td>` : `<td><span class="target-pending">£${total} / £${targetPerMonth}</span></td>`;
+        });
+        footerHTML += `<td></td>`;
+        tfoot.innerHTML = footerHTML;
+    }
+
+    // --- Add/Remove (only when unlocked) ---
+    function addBeneficiary() {
+        if (isLocked) return;
+        const name = prompt("Beneficiary name:");
+        if (!name) return;
+        const lastMonth = committeeData[committeeData.length - 1].month;
+        const nextIdx = (allMonths.indexOf(lastMonth) + 1) % 12;
+        const newMonth = allMonths[nextIdx];
+        const newAbbr = newMonth.slice(0, 3);
+        committeeData.forEach(row => { row.status[newAbbr] = false; });
+        const monthsList = getMonthsList(); monthsList.push(newAbbr);
+        const status = {}; monthsList.forEach(m => { status[m] = false; });
+        committeeData.push({ month: newMonth, name: name.trim(), amount: 500, status });
+        localStorage.setItem('committeeData', JSON.stringify(committeeData));
+        renderTable(); renderDashboard();
+    }
+
+    function removeBeneficiary(rowIndex) {
+        if (isLocked) return;
+        if (!confirm(`Remove ${committeeData[rowIndex].name}?`)) return;
+        const removedAbbr = committeeData[rowIndex].month.slice(0, 3);
+        committeeData.splice(rowIndex, 1);
+        committeeData.forEach(row => { delete row.status[removedAbbr]; });
+        localStorage.setItem('committeeData', JSON.stringify(committeeData));
+        renderTable(); renderDashboard();
+    }
+
+    // --- Export/Import/Reset ---
+    function exportData() {
+        const blob = new Blob([JSON.stringify(committeeData, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+        a.download = `committee-backup-${new Date().toISOString().slice(0,10)}.json`;
+        a.click(); URL.revokeObjectURL(a.href);
+    }
+
+    function exportCSV() {
+        const monthsList = getMonthsList();
+        const headers = ['Month', 'Beneficiary', 'Rate', ...monthsList, 'Received', 'Payout'];
+        const rows = committeeData.map(row => {
+            const received = monthsList.reduce((sum, m) => sum + (row.status[m] ? row.amount : 0), 0);
+            return [row.month, row.name, row.amount, ...monthsList.map(m => row.status[m] ? 'Paid' : 'Unpaid'), received, row.payoutReceived ? 'Yes' : 'No'];
+        });
+        const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(',')).join('\n');
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+        a.download = `committee-${new Date().toISOString().slice(0,10)}.csv`;
+        a.click(); URL.revokeObjectURL(a.href);
+    }
+
+    function importData(event) {
+        const file = event.target.files[0]; if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const data = JSON.parse(e.target.result);
+                if (!Array.isArray(data) || !data[0].status) throw new Error("Invalid");
+                committeeData = data; isLocked = true;
+                localStorage.setItem('committeeData', JSON.stringify(committeeData));
+                localStorage.setItem('committeeLocked', 'true');
+                renderTable(); renderDashboard(); renderActionBar();
+                alert("Data imported successfully!");
+            } catch (err) { alert("Invalid backup file."); }
+        };
+        reader.readAsText(file); event.target.value = '';
+    }
+
+    function resetToDefault() {
+        if (confirm("This will clear all data and start fresh. Are you sure?")) {
+            localStorage.removeItem('committeeData');
+            localStorage.removeItem('committeeLocked');
+            committeeData = null; isLocked = false;
+            showWizard();
+        }
+    }
+
+    function renderActionBar() {
+        const bar = document.querySelector('.action-bar');
+        let html = `
+            <button class="action-btn export-btn" onclick="exportData()">⬇ Export</button>
+            <button class="action-btn export-btn" onclick="exportCSV()">⬇ CSV</button>
+            <button class="action-btn import-btn" onclick="document.getElementById('importFile').click()">⬆ Import</button>
+            <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)">
+            <button class="action-btn reset-btn" onclick="resetToDefault()">↺ New Kommittee</button>
+        `;
+        bar.innerHTML = html;
+    }
+
+    // --- Init ---
+    if (!committeeData) {
+        showWizard();
+    } else {
+        renderDashboard();
+        renderTable();
+        renderActionBar();
+    }
+
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+</script>
+
+</body>
+</html>
