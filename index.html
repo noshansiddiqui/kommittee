@@ -125,26 +125,56 @@ async function decrypt(password) {
   } catch(e) { return null; }
 }
 
-async function unlock() {
-  const pw = document.getElementById('pinInput').value;
-  const content = await decrypt(pw);
-  if (content) {
-    document.getElementById('lockScreen').style.display = 'none';
-    document.getElementById('appContent').innerHTML = content;
-    // Execute scripts in decrypted content
-    document.getElementById('appContent').querySelectorAll('script').forEach(s => {
-      const ns = document.createElement('script');
-      ns.textContent = s.textContent;
-      document.body.appendChild(ns);
-    });
-    sessionStorage.setItem('k_pw', btoa(pw));
-  } else {
-    document.getElementById('pinError').style.display = 'block';
-  }
+// Biometric helpers
+const DB_NAME = 'kommittee_bio';
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = e => e.target.result.createObjectStore('creds');
+    req.onsuccess = e => resolve(e.target.result);
+    req.onerror = e => reject(e.target.error);
+  });
 }
-
-document.getElementById('unlockBtn').addEventListener('click', unlock);
-document.getElementById('pinInput').addEventListener('keyup', e => { if(e.key==='Enter') unlock(); });
+function bioAvailable() {
+  return window.PublicKeyCredential && PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable
+    ? PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable() : Promise.resolve(false);
+}
+async function storeBioCred(pw) {
+  try {
+    const cred = await navigator.credentials.create({publicKey: {
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      rp: {name: 'Kommittee', id: location.hostname},
+      user: {id: crypto.getRandomValues(new Uint8Array(16)), name: 'user', displayName: 'User'},
+      pubKeyCredParams: [{alg: -7, type: 'public-key'},{alg: -257, type: 'public-key'}],
+      authenticatorSelection: {authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'preferred'},
+      timeout: 60000
+    }});
+    if (cred) {
+      const db = await openDB();
+      const tx = db.transaction('creds', 'readwrite');
+      tx.objectStore('creds').put({id: Array.from(new Uint8Array(cred.rawId)), pw: btoa(pw)}, 'bio');
+      await new Promise(r => tx.oncomplete = r);
+      return true;
+    }
+  } catch(e) { console.log('Bio enroll failed:', e); }
+  return false;
+}
+async function getBioCred() {
+  try {
+    const db = await openDB();
+    const tx = db.transaction('creds', 'readonly');
+    const stored = await new Promise(r => {const req = tx.objectStore('creds').get('bio'); req.onsuccess = () => r(req.result);});
+    if (!stored) return null;
+    const cred = await navigator.credentials.get({publicKey: {
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      allowCredentials: [{id: new Uint8Array(stored.id), type: 'public-key', transports: ['internal']}],
+      userVerification: 'required',
+      timeout: 60000
+    }});
+    if (cred) return atob(stored.pw);
+  } catch(e) { console.log('Bio auth failed:', e); }
+  return null;
+}
 
 async function showContent(pw) {
   const content = await decrypt(pw);
@@ -160,75 +190,30 @@ async function showContent(pw) {
   return true;
 }
 
-// Biometric helpers using IndexedDB to store encrypted password
-const DB_NAME = 'kommittee_bio';
-function openDB() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = e => e.target.result.createObjectStore('creds');
-    req.onsuccess = e => resolve(e.target.result);
-    req.onerror = e => reject(e.target.error);
-  });
-}
-async function storeBioCred(pw) {
-  try {
-    const cred = await navigator.credentials.create({publicKey: {
-      challenge: crypto.getRandomValues(new Uint8Array(32)),
-      rp: {name: 'Kommittee', id: location.hostname},
-      user: {id: new Uint8Array(16), name: 'user', displayName: 'User'},
-      pubKeyCredParams: [{alg: -7, type: 'public-key'}],
-      authenticatorSelection: {authenticatorAttachment: 'platform', userVerification: 'required'},
-      timeout: 60000
-    }});
-    if (cred) {
-      const db = await openDB();
-      const tx = db.transaction('creds', 'readwrite');
-      tx.objectStore('creds').put({id: Array.from(new Uint8Array(cred.rawId)), pw: btoa(pw)}, 'bio');
-      await new Promise(r => tx.oncomplete = r);
-      return true;
-    }
-  } catch(e) {}
-  return false;
-}
-async function getBioCred() {
-  try {
-    const db = await openDB();
-    const tx = db.transaction('creds', 'readonly');
-    const stored = await new Promise(r => {const req = tx.objectStore('creds').get('bio'); req.onsuccess = () => r(req.result);});
-    if (!stored) return null;
-    const cred = await navigator.credentials.get({publicKey: {
-      challenge: crypto.getRandomValues(new Uint8Array(32)),
-      allowCredentials: [{id: new Uint8Array(stored.id), type: 'public-key'}],
-      authenticatorSelection: {userVerification: 'required'},
-      timeout: 60000
-    }});
-    if (cred) return atob(stored.pw);
-  } catch(e) {}
-  return null;
-}
-function bioAvailable() {
-  return window.PublicKeyCredential && PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable
-    ? PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable() : Promise.resolve(false);
-}
-
-// Override unlock to add biometric enrollment
-const origUnlock = unlock;
-unlock = async function() {
+async function unlock() {
   const pw = document.getElementById('pinInput').value;
   if (await showContent(pw)) {
+    // Offer biometric enrollment
     const hasBio = await bioAvailable();
-    const db = await openDB();
-    const tx = db.transaction('creds', 'readonly');
-    const existing = await new Promise(r => {const req = tx.objectStore('creds').get('bio'); req.onsuccess = () => r(req.result);});
-    if (hasBio && !existing) {
-      if (confirm('Enable fingerprint/Face ID unlock for next time?')) {
-        await storeBioCred(pw);
+    if (hasBio) {
+      const db = await openDB();
+      const tx = db.transaction('creds', 'readonly');
+      const existing = await new Promise(r => {const req = tx.objectStore('creds').get('bio'); req.onsuccess = () => r(req.result);});
+      if (!existing) {
+        setTimeout(async () => {
+          if (confirm('Enable fingerprint/Face ID unlock for next time?')) {
+            await storeBioCred(pw);
+          }
+        }, 500);
       }
     }
   } else {
     document.getElementById('pinError').style.display = 'block';
   }
-};
+}
+
+document.getElementById('unlockBtn').addEventListener('click', unlock);
+document.getElementById('pinInput').addEventListener('keyup', e => { if(e.key==='Enter') unlock(); });
 
 // Auto-unlock: try biometric first, then session cache
 (async () => {
