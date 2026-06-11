@@ -1,0 +1,46 @@
+Kommittee App - GitHub Pages Deployment Session
+Date: Thursday, 2026-06-11
+================================================
+
+GOAL: Push "Kommittee-Mobile.html" as a PWA app via GitHub Pages
+
+SUMMARY OF STEPS:
+-----------------
+
+1. GIT PUSH AUTHENTICATION ISSUE
+   - Problem: git push prompted for username/password interactively
+   - Solution: Installed GitHub CLI (gh) and ran "gh auth login" (Option 3)
+   - Result: Push succeeded to https://github.com/noshansiddiqui/kommittee.git
+
+2. ENABLED GITHUB PAGES
+   - Pages was already enabled on the repo
+   - Live URL: https://noshansiddiqui.github.io/kommittee/
+   - Source: main branch, root directory
+   - Files in repo: index.html, manifest.json, sw.js
+
+3. 404 ERROR WHEN INSTALLED AS PWA/SHORTCUT
+   - Problem: Page loaded fine in Chrome (normal + incognito) but gave 404 when installed as app/shortcut
+   - Root Cause: manifest.json used relative start_url ("./") and service worker cached relative paths,
+     which broke in standalone PWA mode on GitHub Pages subdirectory (/kommittee/)
+
+4. FIX #1 - ABSOLUTE PATHS (commit 2de0c46)
+   - Changed manifest.json: start_url to "/kommittee/", added scope "/kommittee/"
+   - Updated sw.js: cache paths to absolute (/kommittee/, /kommittee/index.html, etc.)
+   - Bumped cache version to v2, added skipWaiting() and activate event to clear old caches
+
+5. FIX #2 - FORCE CLEAR OLD SERVICE WORKER CACHE (commit be1f853)
+   - Problem: Phone still had old service worker cached with the 404 response
+   - Added code in index.html to unregister old service workers and clear all caches on load
+   - Updated SW registration to use absolute path with explicit scope
+
+FINAL STATE:
+------------
+- Repo: https://github.com/noshansiddiqui/kommittee
+- Live URL: https://noshansiddiqui.github.io/kommittee/
+- Branch: main
+- Files: index.html, manifest.json, sw.js
+
+TO FIX ON PHONE:
+- Delete the installed app/shortcut
+- Clear site data for noshansiddiqui.github.io in Chrome settings
+- Visit the URL fresh, wait for full load, then install/add to home screen
