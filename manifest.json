@@ -1,7 +1,8 @@
 {
   "name": "Kommittee - Maria Noshan",
   "short_name": "Kommittee",
-  "start_url": "./",
+  "start_url": "/kommittee/",
+  "scope": "/kommittee/",
   "display": "standalone",
   "background_color": "#f4f6f9",
   "theme_color": "#2c3e50",
